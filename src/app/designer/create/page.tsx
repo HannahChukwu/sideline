@@ -140,7 +140,7 @@ export default function CreateAsset() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar role="designer" />
+      <Navbar />
 
       <main className="pt-20 px-6 pb-16 max-w-6xl mx-auto">
         <div className="pt-8 mb-8 flex items-center gap-4">

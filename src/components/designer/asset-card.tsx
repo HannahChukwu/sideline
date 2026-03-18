@@ -23,7 +23,7 @@ export type AssetCardModel = {
 
 interface AssetCardProps {
   asset: AssetCardModel;
-  variant?: "designer" | "athlete" | "fan";
+  variant?: "designer" | "athlete" | "student";
   liked?: boolean;
   onLike?: (id: string) => void;
 }
@@ -130,7 +130,7 @@ export function AssetCard({ asset, variant = "designer", liked = false, onLike }
               onClick={() => onLike?.(asset.id)}
               className={cn(
                 "flex items-center gap-1.5 text-xs transition-all",
-                variant === "athlete" || variant === "fan"
+                variant === "athlete" || variant === "student"
                   ? liked
                     ? "text-red-400 hover:text-red-300"
                     : "text-muted-foreground hover:text-red-400"

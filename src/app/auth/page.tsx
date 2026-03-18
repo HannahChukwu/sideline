@@ -38,11 +38,8 @@ function AuthForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const rawRole = searchParams.get("role") as Role | null;
-  const role: Role = rawRole && rawRole in ROLE_META ? rawRole : "student";
-  const meta = ROLE_META[role];
-
   const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [selectedRole, setSelectedRole] = useState<Role>("student");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -64,6 +61,14 @@ function AuthForm() {
     if (m === "signup") setMode("signup");
     if (m === "signin" || m === "login") setMode("signin");
   }, [searchParams]);
+
+  useEffect(() => {
+    const rawRole = searchParams.get("role") as Role | null;
+    const fromQuery: Role = rawRole && rawRole in ROLE_META ? rawRole : "student";
+    setSelectedRole(fromQuery);
+  }, [searchParams]);
+
+  const meta = ROLE_META[selectedRole];
 
   async function handleGoogleSignIn() {
     setError(null);
@@ -115,7 +120,7 @@ function AuthForm() {
           email,
           password,
           options: {
-            data: { role, full_name: fullName },
+            data: { role: selectedRole, full_name: fullName },
             emailRedirectTo: `${window.location.origin}/auth/callback`,
           },
         });
@@ -130,7 +135,7 @@ function AuthForm() {
 
         if (data.session) {
           // Email confirmation disabled → signed in immediately
-          router.push(ROLE_ROUTES[role]);
+          router.push(ROLE_ROUTES[selectedRole]);
           router.refresh();
         } else {
           // Confirmation email sent
@@ -153,7 +158,7 @@ function AuthForm() {
             .single();
 
           const roleFromDb = (profile as unknown as { role?: Role | null } | null)?.role ?? null;
-          const destination = roleFromDb ? ROLE_ROUTES[roleFromDb] : ROLE_ROUTES[role];
+          const destination = roleFromDb ? ROLE_ROUTES[roleFromDb] : ROLE_ROUTES[selectedRole];
 
           router.push(destination);
           router.refresh();
@@ -213,6 +218,39 @@ function AuthForm() {
         {mode === "signin" ? "Welcome back" : "Create your account"}
       </h1>
       <p className="text-sm text-muted-foreground mb-7">{meta.description}</p>
+
+      {/* Role picker (signup only) */}
+      {mode === "signup" && (
+        <div className="mb-5">
+          <div className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground/70 mb-2">
+            Choose your role
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {(Object.keys(ROLE_META) as Role[]).map((r) => {
+              const m = ROLE_META[r];
+              const active = selectedRole === r;
+              return (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setSelectedRole(r)}
+                  className={cn(
+                    "rounded-xl border px-3 py-2 text-left transition-all",
+                    active
+                      ? "border-primary/40 bg-primary/10"
+                      : "border-white/10 bg-white/5 hover:bg-white/7"
+                  )}
+                >
+                  <div className={cn("flex items-center gap-2 text-xs font-semibold", active ? "text-primary" : "text-foreground/80")}>
+                    <span className={cn("shrink-0", active ? "text-primary" : "text-foreground/60")}>{m.icon}</span>
+                    {m.label}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Google OAuth */}
       <button

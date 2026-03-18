@@ -76,7 +76,7 @@ export default function DesignerDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar role="designer" />
+      <Navbar />
 
       <main className="pt-20 px-6 pb-16 max-w-7xl mx-auto">
         {/* Header */}
