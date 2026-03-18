@@ -294,6 +294,31 @@ create index if not exists asset_likes_user_id_idx on public.asset_likes (user_i
 alter table public.assets enable row level security;
 alter table public.asset_likes enable row level security;
 
+-- ============================================================
+-- 7. INSTAGRAM CONNECTIONS (designer only)
+--    Stores the connected Instagram user id + encrypted token.
+-- ============================================================
+create table if not exists public.instagram_accounts (
+  user_id                 uuid primary key references auth.users(id) on delete cascade,
+  ig_user_id              text not null,
+  access_token_encrypted text not null,
+  connected_at            timestamptz not null default now(),
+  updated_at              timestamptz not null default now()
+);
+
+alter table public.instagram_accounts enable row level security;
+
+drop policy if exists "Users can view own Instagram account" on public.instagram_accounts;
+create policy "Users can view own Instagram account"
+  on public.instagram_accounts for select
+  using (user_id = auth.uid());
+
+drop policy if exists "Users can upsert own Instagram account" on public.instagram_accounts;
+create policy "Users can upsert own Instagram account"
+  on public.instagram_accounts for all
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
 -- Assets policies:
 -- - Everyone authenticated can read published assets.
 -- - Designers can read their own drafts/archived.

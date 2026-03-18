@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Sparkles, Loader2, Download, Share2, RefreshCw, Wand2 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -47,9 +47,85 @@ export default function CreateAsset() {
   const [publishLoading, setPublishLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Instagram (designer MVP: Create Asset → connect + post while staying on page)
+  const [igConnected, setIgConnected] = useState<boolean | null>(null);
+  const [igUserId, setIgUserId] = useState<string | null>(null);
+  const [igCaption, setIgCaption] = useState<string>("");
+  const [igPosting, setIgPosting] = useState(false);
+  const [igPostError, setIgPostError] = useState<string | null>(null);
+  const [igPostSuccess, setIgPostSuccess] = useState<string | null>(null);
+
   const supabase = useMemo(() => createClient(), []);
 
   const isScoreType = form.type === "final-score";
+
+  const defaultInstagramCaption = useMemo(() => {
+    const teamA = form.homeTeam || "Team";
+    const teamB = form.awayTeam || "Opponent";
+    const when = form.eventDate ? `📅 ${form.eventDate}` : "Game day";
+    const scoreLine =
+      isScoreType && form.homeScore && form.awayScore
+        ? `Final score: ${form.homeScore}-${form.awayScore}`
+        : "";
+
+    const tags = ["#SidelineStudio", "#GameDay", "#Athletics"]
+      .concat(teamA.trim() ? [`#${teamA.trim().replace(/\s+/g, "")}`] : [])
+      .concat(teamB.trim() ? [`#${teamB.trim().replace(/\s+/g, "")}`] : [])
+      .join(" ");
+
+    const cta = "Be there.";
+
+    const paragraphs = [
+      `${teamA} vs ${teamB} ${when}`,
+      [scoreLine, cta].filter(Boolean).join("\n"),
+      tags,
+    ].filter(Boolean);
+
+    // Instagram captions can include multiple paragraphs via \n.
+    return paragraphs.join("\n\n").slice(0, 2200);
+  }, [form.awayScore, form.awayTeam, form.eventDate, form.homeScore, form.homeTeam, isScoreType]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadInstagramStatus() {
+      try {
+        const { data: userRes, error: userErr } = await supabase.auth.getUser();
+        if (userErr) throw userErr;
+        const user = userRes.user;
+
+        if (!user) {
+          if (!cancelled) setIgConnected(false);
+          return;
+        }
+
+        const res = await fetch("/api/instagram/status", { credentials: "include" });
+        const json = await res.json().catch(() => ({}));
+        if (cancelled) return;
+
+        setIgConnected(Boolean(json.connected));
+        setIgUserId(json.ig_user_id ?? null);
+      } catch {
+        if (!cancelled) setIgConnected(false);
+      }
+    }
+
+    // Avoid flashing the connect UI while we don't yet know.
+    setIgConnected(null);
+    loadInstagramStatus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase]);
+
+  useEffect(() => {
+    if (step !== "result") return;
+    if (!generatedImageUrl) return;
+
+    // Only set a default caption if the user hasn't typed one yet.
+    setIgCaption((prev) => (prev.trim().length ? prev : defaultInstagramCaption));
+  }, [step, generatedImageUrl, defaultInstagramCaption]);
 
   function set(key: keyof FormState, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -58,6 +134,9 @@ export default function CreateAsset() {
   async function generate() {
     setError(null);
     setStep("generating");
+    setIgCaption("");
+    setIgPostError(null);
+    setIgPostSuccess(null);
     // Simulate AI generation delay
     await new Promise((r) => setTimeout(r, 2800));
     const prompt = [
@@ -76,6 +155,9 @@ export default function CreateAsset() {
   function regenerate() {
     setError(null);
     setStep("generating");
+    setIgCaption("");
+    setIgPostError(null);
+    setIgPostSuccess(null);
     setTimeout(() => {
       const prompt = [
         `${form.type} for ${form.sport}`,
@@ -97,37 +179,42 @@ export default function CreateAsset() {
     !!form.eventDate &&
     !publishLoading;
 
+  async function insertAssetRecord(): Promise<void> {
+    const { data: userRes, error: userErr } = await supabase.auth.getUser();
+    if (userErr) throw userErr;
+    const user = userRes.user;
+    if (!user) throw new Error("Not signed in");
+
+    const now = new Date().toISOString();
+    const homeScore = isScoreType && form.homeScore !== "" ? Number(form.homeScore) : null;
+    const awayScore = isScoreType && form.awayScore !== "" ? Number(form.awayScore) : null;
+
+    const { error: insertErr } = await supabase.from("assets").insert({
+      designer_id: user.id,
+      title: `${form.homeTeam} vs ${form.awayTeam}`,
+      type: form.type,
+      status: "published",
+      sport: form.sport,
+      home_team: form.homeTeam,
+      away_team: form.awayTeam,
+      home_score: Number.isFinite(homeScore as number) ? (homeScore as number) : null,
+      away_score: Number.isFinite(awayScore as number) ? (awayScore as number) : null,
+      event_date: form.eventDate,
+      image_url: generatedImageUrl,
+      created_at: now,
+      updated_at: now,
+      published_at: now,
+    });
+
+    if (insertErr) throw insertErr;
+  }
+
   async function publish() {
     if (!generatedImageUrl) return;
     setError(null);
     setPublishLoading(true);
     try {
-      const { data: userRes, error: userErr } = await supabase.auth.getUser();
-      if (userErr) throw userErr;
-      const user = userRes.user;
-      if (!user) throw new Error("Not signed in");
-
-      const now = new Date().toISOString();
-      const homeScore = isScoreType && form.homeScore !== "" ? Number(form.homeScore) : null;
-      const awayScore = isScoreType && form.awayScore !== "" ? Number(form.awayScore) : null;
-
-      const { error: insertErr } = await supabase.from("assets").insert({
-        designer_id: user.id,
-        title: `${form.homeTeam} vs ${form.awayTeam}`,
-        type: form.type,
-        status: "published",
-        sport: form.sport,
-        home_team: form.homeTeam,
-        away_team: form.awayTeam,
-        home_score: Number.isFinite(homeScore as number) ? (homeScore as number) : null,
-        away_score: Number.isFinite(awayScore as number) ? (awayScore as number) : null,
-        event_date: form.eventDate,
-        image_url: generatedImageUrl,
-        created_at: now,
-        updated_at: now,
-        published_at: now,
-      });
-      if (insertErr) throw insertErr;
+      await insertAssetRecord();
 
       router.push("/designer");
       router.refresh();
@@ -135,6 +222,40 @@ export default function CreateAsset() {
       setError(e instanceof Error ? e.message : "Failed to publish");
     } finally {
       setPublishLoading(false);
+    }
+  }
+
+  function connectInstagram() {
+    const next = `${window.location.pathname}${window.location.search}`;
+    window.location.href = `/api/instagram/connect?next=${encodeURIComponent(next)}`;
+  }
+
+  async function postToInstagram() {
+    if (!generatedImageUrl) return;
+    if (!igConnected) return;
+
+    setIgPostError(null);
+    setIgPostSuccess(null);
+    setIgPosting(true);
+
+    try {
+      const caption = igCaption.trim();
+      const res = await fetch("/api/instagram/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl: generatedImageUrl, caption }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.error || "Failed to publish to Instagram");
+      }
+
+      setIgPostSuccess("Posted to Instagram successfully.");
+    } catch (e: unknown) {
+      setIgPostError(e instanceof Error ? e.message : "Failed to post to Instagram");
+    } finally {
+      setIgPosting(false);
     }
   }
 
@@ -398,19 +519,68 @@ export default function CreateAsset() {
                   </p>
                   <p className="text-xs text-muted-foreground mb-4">{form.sport} · {ASSET_TYPES.find((t) => t.value === form.type)?.label}</p>
 
-                  <div className="flex gap-2">
+                  <div className="mt-3">
+                    <div className="text-[11px] font-semibold tracking-widest uppercase text-muted-foreground/70 mb-2">
+                      Instagram caption
+                    </div>
+                    <textarea
+                      value={igCaption}
+                      onChange={(e) => setIgCaption(e.target.value)}
+                      rows={3}
+                      placeholder="Write the caption you want to post…"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-card border border-border/50 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all resize-none [color-scheme:dark]"
+                    />
+                  </div>
+
+                  <div className="mt-4 flex gap-2 flex-wrap">
                     <button
                       onClick={publish}
                       disabled={!canPublish}
-                      className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all glow-orange-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="flex-1 min-w-[220px] flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all glow-orange-sm disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {publishLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Share2 className="w-3.5 h-3.5" />}
-                      Publish
+                      Save to feeds
                     </button>
-                    <button className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-muted text-foreground text-xs font-medium hover:bg-muted/70 transition-all">
+
+                    <button
+                      onClick={() => (igConnected ? postToInstagram() : connectInstagram())}
+                      disabled={
+                        igConnected === null ||
+                        igPosting ||
+                        (igConnected === true && !igCaption.trim()) ||
+                        !generatedImageUrl
+                      }
+                      className={[
+                        "flex-1 min-w-[220px] flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed",
+                        igConnected ? "bg-primary text-primary-foreground hover:bg-primary/90 glow-orange-sm" : "bg-muted text-foreground hover:bg-muted/70",
+                      ].join(" ")}
+                    >
+                      {igPosting ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : igConnected ? (
+                        <Share2 className="w-3.5 h-3.5" />
+                      ) : (
+                        <Wand2 className="w-3.5 h-3.5" />
+                      )}
+                      {igPosting ? "Posting…" : igConnected ? "Post to Instagram" : igConnected === null ? "Checking Instagram…" : "Connect Instagram"}
+                    </button>
+
+                    <button className="flex items-center justify-center gap-2 min-w-[140px] px-4 py-2.5 rounded-xl bg-muted text-foreground text-xs font-medium hover:bg-muted/70 transition-all">
                       <Download className="w-3.5 h-3.5" />
                     </button>
                   </div>
+
+                  {igPostError && (
+                    <div className="mt-3 text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
+                      {igPostError}
+                    </div>
+                  )}
+
+                  {igPostSuccess && (
+                    <div className="mt-3 text-xs text-green-400 bg-green-400/10 border border-green-400/20 rounded-lg px-3 py-2">
+                      {igPostSuccess}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

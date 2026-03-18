@@ -84,6 +84,27 @@ export interface Database {
         Insert: { asset_id: string; user_id: string; created_at?: string };
         Update: never;
       };
+      instagram_accounts: {
+        Row: {
+          user_id: string;
+          ig_user_id: string;
+          access_token_encrypted: string;
+          connected_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          ig_user_id: string;
+          access_token_encrypted: string;
+          connected_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<{
+          ig_user_id: string;
+          access_token_encrypted: string;
+          updated_at: string;
+        }>;
+      };
       schools: {
         Row: { id: string; name: string; manager_id: string; created_at: string; updated_at: string };
         Insert: { id?: string; name: string; manager_id: string; created_at?: string; updated_at?: string };
