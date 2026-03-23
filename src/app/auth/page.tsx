@@ -38,6 +38,7 @@ function AuthForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+<<<<<<< HEAD
   const rawRole = searchParams.get("role") as Role | null;
   const preselectedRole: Role | null = rawRole && rawRole in ROLE_META ? rawRole : null;
 
@@ -47,11 +48,16 @@ function AuthForm() {
 
   const initialMode = searchParams.get("mode") === "signup" ? "signup" : "signin";
   const [mode, setMode] = useState<"signin" | "signup">(initialMode);
+=======
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [selectedRole, setSelectedRole] = useState<Role>("student");
+>>>>>>> eb4f417162a4db54db073d509c6f9104ce6c8d19
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [emailSent, setEmailSent] = useState(false);
 
@@ -61,6 +67,49 @@ function AuthForm() {
     const t = setTimeout(() => setVisible(true), 60);
     return () => clearTimeout(t);
   }, []);
+
+  useEffect(() => {
+    const m = searchParams.get("mode");
+    if (m === "signup") setMode("signup");
+    if (m === "signin" || m === "login") setMode("signin");
+  }, [searchParams]);
+
+  useEffect(() => {
+    const rawRole = searchParams.get("role") as Role | null;
+    const fromQuery: Role = rawRole && rawRole in ROLE_META ? rawRole : "student";
+    setSelectedRole(fromQuery);
+  }, [searchParams]);
+
+  const meta = ROLE_META[selectedRole];
+
+  async function handleGoogleSignIn() {
+    setError(null);
+    setGoogleLoading(true);
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+    if (!supabaseUrl.startsWith("http") || supabaseKey.length < 10) {
+      setError(
+        "Supabase is not configured. Add your project URL and anon key to .env.local to enable auth."
+      );
+      setGoogleLoading(false);
+      return;
+    }
+
+    const supabase = createClient();
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+
+    if (oauthError) {
+      setError(oauthError.message);
+      setGoogleLoading(false);
+    }
+    // On success, Supabase redirects away; no further action needed here.
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -83,7 +132,7 @@ function AuthForm() {
           email,
           password,
           options: {
-            data: { role, full_name: fullName },
+            data: { role: selectedRole, full_name: fullName },
             emailRedirectTo: `${window.location.origin}/auth/callback`,
           },
         });
@@ -98,7 +147,7 @@ function AuthForm() {
 
         if (data.session) {
           // Email confirmation disabled → signed in immediately
-          router.push(ROLE_ROUTES[role]);
+          router.push(ROLE_ROUTES[selectedRole]);
           router.refresh();
         } else {
           // Confirmation email sent
@@ -120,9 +169,8 @@ function AuthForm() {
             .eq("id", data.user.id)
             .single();
 
-          const destination = profile?.role
-            ? ROLE_ROUTES[profile.role as Role]
-            : ROLE_ROUTES[role];
+          const roleFromDb = (profile as unknown as { role?: Role | null } | null)?.role ?? null;
+          const destination = roleFromDb ? ROLE_ROUTES[roleFromDb] : ROLE_ROUTES[selectedRole];
 
           router.push(destination);
           router.refresh();
@@ -234,6 +282,62 @@ function AuthForm() {
         {mode === "signin" ? "Welcome back" : "Create your account"}
       </h1>
       <p className="text-sm text-muted-foreground mb-7">{meta.description}</p>
+
+      {/* Role picker (signup only) */}
+      {mode === "signup" && (
+        <div className="mb-5">
+          <div className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground/70 mb-2">
+            Choose your role
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {(Object.keys(ROLE_META) as Role[]).map((r) => {
+              const m = ROLE_META[r];
+              const active = selectedRole === r;
+              return (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setSelectedRole(r)}
+                  className={cn(
+                    "rounded-xl border px-3 py-2 text-left transition-all",
+                    active
+                      ? "border-primary/40 bg-primary/10"
+                      : "border-white/10 bg-white/5 hover:bg-white/7"
+                  )}
+                >
+                  <div className={cn("flex items-center gap-2 text-xs font-semibold", active ? "text-primary" : "text-foreground/80")}>
+                    <span className={cn("shrink-0", active ? "text-primary" : "text-foreground/60")}>{m.icon}</span>
+                    {m.label}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Google OAuth */}
+      <button
+        type="button"
+        onClick={handleGoogleSignIn}
+        disabled={loading || googleLoading}
+        className={cn(
+          "w-full py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2",
+          "border border-white/10 bg-white/5 text-foreground hover:bg-white/7 active:scale-[0.98]",
+          "disabled:opacity-50 disabled:cursor-not-allowed"
+        )}
+      >
+        {googleLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+        Continue with Google
+      </button>
+
+      <div className="flex items-center gap-3 my-2">
+        <div className="h-px flex-1 bg-white/10" />
+        <span className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground/60">
+          Or
+        </span>
+        <div className="h-px flex-1 bg-white/10" />
+      </div>
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">

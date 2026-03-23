@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Palette, Trophy, Users, ArrowRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { Logo } from '@/components/brand/logo';
 
 export default function Home() {
@@ -58,53 +58,6 @@ export default function Home() {
           <Link href='/auth?mode=login' className='inline-flex items-center gap-2 px-7 py-3 rounded-xl border border-border bg-white/[0.04] text-foreground/80 text-sm font-bold tracking-tight hover:bg-white/[0.07] hover:text-foreground hover:border-primary/30 transition-all duration-200'>
             Sign In
           </Link>
-        </div>
-
-        <div className='w-full max-w-2xl animate-fade-up animate-delay-300'>
-          <p className='text-center text-[10px] font-bold tracking-[0.35em] uppercase text-muted-foreground/60 mb-4'>Choose your portal</p>
-          <div className='grid grid-cols-1 md:grid-cols-3 gap-2.5'>
-            <Link href='/auth?role=designer&mode=signup' className='sport-border-top group flex flex-col gap-3.5 rounded-xl p-5 border border-white/7 bg-white/[0.025] hover:bg-primary/7 hover:border-primary/22 transition-all duration-200'>
-              <div className='flex items-start justify-between'>
-                <div className='w-9 h-9 rounded-lg bg-primary/12 flex items-center justify-center group-hover:bg-primary/22 transition-colors'>
-                  <Palette className='w-4 h-4 text-primary' />
-                </div>
-                <ArrowRight className='w-3.5 h-3.5 text-foreground/15 group-hover:text-primary group-hover:translate-x-0.5 transition-all duration-200' />
-              </div>
-              <div>
-                <h2 className='font-bold text-[13px] text-foreground mb-1 tracking-tight'>Designer</h2>
-                <p className='text-[11px] text-foreground/38 leading-relaxed font-semibold'>Generate and publish game day posters, score cards, and hype graphics.</p>
-              </div>
-              <span className='text-[11px] font-bold text-primary/60 group-hover:text-primary transition-colors'>Enter portal →</span>
-            </Link>
-
-            <Link href='/auth?role=athlete&mode=signup' className='sport-border-top group flex flex-col gap-3.5 rounded-xl p-5 border border-white/7 bg-white/[0.025] hover:bg-violet-500/7 hover:border-violet-500/22 transition-all duration-200'>
-              <div className='flex items-start justify-between'>
-                <div className='w-9 h-9 rounded-lg bg-violet-500/12 flex items-center justify-center group-hover:bg-violet-500/22 transition-colors'>
-                  <Trophy className='w-4 h-4 text-violet-400' />
-                </div>
-                <ArrowRight className='w-3.5 h-3.5 text-foreground/15 group-hover:text-violet-400 group-hover:translate-x-0.5 transition-all duration-200' />
-              </div>
-              <div>
-                <h2 className='font-bold text-[13px] text-foreground mb-1 tracking-tight'>Athlete</h2>
-                <p className='text-[11px] text-foreground/38 leading-relaxed font-semibold'>Review assets made for your team and react to give designers feedback.</p>
-              </div>
-              <span className='text-[11px] font-bold text-violet-400/60 group-hover:text-violet-400 transition-colors'>Enter portal →</span>
-            </Link>
-
-            <Link href='/feed' className='sport-border-top group flex flex-col gap-3.5 rounded-xl p-5 border border-white/7 bg-white/[0.025] hover:bg-white/5 hover:border-white/14 transition-all duration-200'>
-              <div className='flex items-start justify-between'>
-                <div className='w-9 h-9 rounded-lg bg-white/6 flex items-center justify-center group-hover:bg-white/10 transition-colors'>
-                  <Users className='w-4 h-4 text-foreground/45' />
-                </div>
-                <ArrowRight className='w-3.5 h-3.5 text-foreground/15 group-hover:text-foreground/55 group-hover:translate-x-0.5 transition-all duration-200' />
-              </div>
-              <div>
-                <h2 className='font-bold text-[13px] text-foreground mb-1 tracking-tight'>Student Feed</h2>
-                <p className='text-[11px] text-foreground/38 leading-relaxed font-semibold'>Live scores, game day graphics, and event updates for your school.</p>
-              </div>
-              <span className='text-[11px] font-bold text-foreground/28 group-hover:text-foreground/55 transition-colors'>View feed →</span>
-            </Link>
-          </div>
         </div>
 
         <div className='mt-12 flex items-center gap-10 animate-fade-up animate-delay-400'>

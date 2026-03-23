@@ -1,25 +1,39 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Plus, TrendingUp, Image as ImageIcon, Heart, CheckCircle } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { AssetCard } from "@/components/designer/asset-card";
-import { MOCK_ASSETS } from "@/lib/mock-data";
-
-const stats = [
-  { label: "Assets Created", value: "24", icon: ImageIcon, color: "text-primary" },
-  { label: "Total Likes", value: "94", icon: Heart, color: "text-red-400" },
-  { label: "Published", value: "18", icon: CheckCircle, color: "text-green-400" },
-  { label: "This Week", value: "+6", icon: TrendingUp, color: "text-blue-400" },
-];
+import { useAppStore } from "@/lib/store";
 
 export default function DesignerDashboard() {
   const [filter, setFilter] = useState<"all" | "published" | "draft">("all");
+  const [mounted, setMounted] = useState(false);
 
-  const filtered = MOCK_ASSETS.filter((a) =>
+  const assets       = useAppStore((s) => s.assets);
+  const updateStatus = useAppStore((s) => s.updateStatus);
+
+  // Defer store reads to client to avoid SSR/hydration mismatch
+  useEffect(() => { setMounted(true); }, []);
+
+  const display  = mounted ? assets.filter((a) => a.status !== "archived") : [];
+  const filtered = display.filter((a) =>
     filter === "all" ? true : a.status === filter
   );
+
+  // Live stats computed from real store data
+  const totalLikes     = display.reduce((s, a) => s + a.likes, 0);
+  const publishedCount = display.filter((a) => a.status === "published").length;
+  const oneWeekAgo     = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const thisWeek       = display.filter((a) => (a.createdAt ?? "") >= oneWeekAgo).length;
+
+  const stats = [
+    { label: "Assets Created", value: String(display.length),   icon: ImageIcon,    color: "text-primary" },
+    { label: "Total Likes",    value: String(totalLikes),        icon: Heart,         color: "text-red-400" },
+    { label: "Published",      value: String(publishedCount),    icon: CheckCircle,  color: "text-green-400" },
+    { label: "This Week",      value: `+${thisWeek}`,            icon: TrendingUp,   color: "text-blue-400" },
+  ];
 
   return (
     <div className="min-h-screen bg-background">
@@ -34,7 +48,7 @@ export default function DesignerDashboard() {
           </div>
           <Link
             href="/designer/create"
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-all glow-orange-sm hover:glow-orange"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-all glow-violet-sm hover:glow-violet"
           >
             <Plus className="w-4 h-4" />
             Generate Poster
@@ -80,21 +94,22 @@ export default function DesignerDashboard() {
               className="animate-fade-up"
               style={{ animationDelay: `${i * 60}ms`, animationFillMode: "both" }}
             >
-              <AssetCard asset={asset} variant="designer" />
+              <AssetCard
+                asset={asset}
+                variant="designer"
+                onPublish={(id) => updateStatus(id, "published")}
+              />
             </div>
           ))}
         </div>
 
-        {filtered.length === 0 && (
+        {mounted && filtered.length === 0 && (
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mb-4">
               <ImageIcon className="w-6 h-6 text-muted-foreground" />
             </div>
             <p className="text-muted-foreground text-sm">No {filter} assets yet.</p>
-            <Link
-              href="/designer/create"
-              className="mt-4 text-sm text-primary hover:text-primary/80 font-medium"
-            >
+            <Link href="/designer/create" className="mt-4 text-sm text-primary hover:text-primary/80 font-medium">
               Create your first asset →
             </Link>
           </div>

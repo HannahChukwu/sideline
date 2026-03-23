@@ -5,8 +5,11 @@ import { Heart, Eye, MoreHorizontal, Clock, CheckCircle, FileEdit } from "lucide
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-/** Minimal shape required by AssetCard — satisfied by both Asset (mock-data) and StoreAsset (store). */
-export interface CardAsset {
+/**
+ * Minimal asset shape required by this card.
+ * Both mock-data `Asset` and store `StoreAsset` satisfy this interface.
+ */
+export type AssetCardModel = {
   id: string;
   title: string;
   type: "gameday" | "final-score" | "poster" | "highlight";
@@ -20,15 +23,17 @@ export interface CardAsset {
   imageUrl: string;
   likes: number;
   designerName: string;
-  createdAt: string;
-}
+  createdAt?: string;
+};
 
 interface AssetCardProps {
-  asset: CardAsset;
-  variant?: "designer" | "athlete" | "fan";
+  asset: AssetCardModel;
+  /** "designer" = creator view, "athlete" = team feedback view, "student" / "fan" = public view */
+  variant?: "designer" | "athlete" | "student" | "fan";
   liked?: boolean;
   onLike?: (id: string) => void;
-  onPublish?: (id: string) => void; // for designer dashboard — promote draft to published
+  /** Designer dashboard only — promote a draft to published */
+  onPublish?: (id: string) => void;
 }
 
 const typeColors: Record<string, string> = {
@@ -46,7 +51,8 @@ const typeLabels: Record<string, string> = {
 };
 
 export function AssetCard({ asset, variant = "designer", liked = false, onLike, onPublish }: AssetCardProps) {
-  const isPublished = asset.status === "published";
+  const isPublished   = asset.status === "published";
+  const canLike       = variant === "athlete" || variant === "student" || variant === "fan";
 
   return (
     <div className="group relative rounded-xl overflow-hidden border border-border/50 bg-card transition-all duration-300 hover:border-border hover:shadow-2xl hover:shadow-black/50 hover:-translate-y-0.5">
@@ -80,9 +86,9 @@ export function AssetCard({ asset, variant = "designer", liked = false, onLike, 
           )}
         </div>
 
-        {/* Score overlay for final-score */}
+        {/* Score overlay for final-score type */}
         {asset.type === "final-score" && asset.homeScore !== undefined && (
-          <div className="absolute bottom-0 left-0 right-0 p-3 flex items-end justify-between">
+          <div className="absolute bottom-0 left-0 right-0 p-3">
             <div className="flex items-baseline gap-3">
               <div className="text-center">
                 <div className="text-[10px] text-white/60 uppercase tracking-wider">{asset.homeTeam}</div>
@@ -101,9 +107,7 @@ export function AssetCard({ asset, variant = "designer", liked = false, onLike, 
       {/* Content */}
       <div className="p-4">
         <div className="flex items-start justify-between gap-2 mb-2">
-          <h3 className="font-medium text-sm text-foreground leading-snug line-clamp-2">
-            {asset.title}
-          </h3>
+          <h3 className="font-medium text-sm text-foreground leading-snug line-clamp-2">{asset.title}</h3>
           {variant === "designer" && (
             <button className="text-muted-foreground hover:text-foreground p-0.5 shrink-0 transition-colors">
               <MoreHorizontal className="w-4 h-4" />
@@ -128,12 +132,13 @@ export function AssetCard({ asset, variant = "designer", liked = false, onLike, 
         {/* Footer */}
         <div className="flex items-center justify-between pt-3 border-t border-border/50">
           <div className="flex items-center gap-3">
+            {/* Like button */}
             <button
-              onClick={() => onLike?.(asset.id)}
-              disabled={variant === "designer"}
+              onClick={() => canLike && onLike?.(asset.id)}
+              disabled={!canLike}
               className={cn(
                 "flex items-center gap-1.5 text-xs transition-all",
-                variant === "athlete" || variant === "fan"
+                canLike
                   ? liked
                     ? "text-red-400 hover:text-red-300"
                     : "text-muted-foreground hover:text-red-400"
@@ -150,19 +155,17 @@ export function AssetCard({ asset, variant = "designer", liked = false, onLike, 
             </div>
           </div>
 
-          {/* Designer actions */}
+          {/* Designer dashboard: promote draft */}
           {variant === "designer" && asset.status === "draft" && (
             <div className="flex items-center gap-2">
               <button
                 onClick={() => onPublish?.(asset.id)}
                 className="flex items-center gap-1 text-[11px] text-green-400 hover:text-green-300 font-medium transition-colors"
               >
-                <CheckCircle className="w-3 h-3" />
-                Publish
+                <CheckCircle className="w-3 h-3" /> Publish
               </button>
               <button className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 font-medium transition-colors">
-                <FileEdit className="w-3 h-3" />
-                Edit
+                <FileEdit className="w-3 h-3" /> Edit
               </button>
             </div>
           )}

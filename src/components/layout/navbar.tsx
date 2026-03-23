@@ -2,13 +2,16 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOut } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { LogOut, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { Logo } from "@/components/brand/logo";
+import type { Role } from "@/lib/types";
+import { ROLE_LABELS } from "@/lib/types";
 
 interface NavbarProps {
-  role?: "designer" | "athlete" | "fan";
+  role?: Role;
   userEmail?: string | null;
 }
 
@@ -19,23 +22,64 @@ const designerLinks = [
 
 const athleteLinks = [{ href: "/athlete", label: "My Feed" }];
 
-const fanLinks = [{ href: "/feed", label: "Live Feed" }];
+const studentLinks = [{ href: "/feed", label: "Live Feed" }];
 
 export function Navbar({ role, userEmail }: NavbarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
+  const [resolvedRole, setResolvedRole] = useState<Role | null>(role ?? null);
+  const [resolvedEmail, setResolvedEmail] = useState<string | null>(userEmail ?? null);
+  const [resolvedName, setResolvedName] = useState<string | null>(null);
+  const [hasUser, setHasUser] = useState(false);
 
   const links =
-    role === "designer"
+    resolvedRole === "designer"
       ? designerLinks
-      : role === "athlete"
+      : resolvedRole === "athlete"
       ? athleteLinks
-      : role === "fan"
-      ? fanLinks
+      : resolvedRole === "student"
+      ? studentLinks
       : [];
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const { data, error } = await supabase.auth.getUser();
+        if (cancelled) return;
+        if (error) throw error;
+        const user = data.user;
+        setHasUser(Boolean(user));
+
+        // If caller passed explicit props, respect them.
+        if (!user) return;
+        if (role && userEmail) return;
+
+        const { data: profile, error: profileErr } = await supabase
+          .from("profiles")
+          .select("role, full_name, email")
+          .eq("id", user.id)
+          .single();
+        if (cancelled) return;
+        if (profileErr) throw profileErr;
+
+        setResolvedRole((role ?? (profile?.role as Role | null)) ?? null);
+        setResolvedName(profile?.full_name ?? null);
+        setResolvedEmail((userEmail ?? profile?.email ?? user.email) ?? null);
+      } catch {
+        // Non-blocking: navbar still renders without role/email.
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, role, userEmail]);
+
   async function handleSignOut() {
-    const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/");
     router.refresh();
@@ -45,7 +89,7 @@ export function Navbar({ role, userEmail }: NavbarProps) {
     <header className="fixed top-0 left-0 right-0 z-50 border-b border-border/50">
       <div className="glass px-6 py-4 flex items-center justify-between">
         {/* Logo */}
-        <Link href="/" className="group transition-opacity hover:opacity-80">
+        <Link href="/settings" className="group transition-opacity hover:opacity-80">
           <Logo size="sm" />
         </Link>
 
@@ -69,36 +113,49 @@ export function Navbar({ role, userEmail }: NavbarProps) {
 
         {/* Right side: role badge + user + sign out */}
         <div className="flex items-center gap-3">
-          {role && (
+          {resolvedRole && (
             <div
               className={cn(
                 "px-3 py-1 rounded-full text-xs font-semibold tracking-wider uppercase border",
-                role === "designer" &&
+                resolvedRole === "designer" &&
                   "border-primary/30 text-primary bg-primary/10",
-                role === "athlete" &&
+                resolvedRole === "athlete" &&
                   "border-violet-500/30 text-violet-400 bg-violet-500/10",
-                role === "fan" &&
+                resolvedRole === "student" &&
                   "border-white/20 text-white/60 bg-white/5"
               )}
             >
-              {role}
+              {ROLE_LABELS[resolvedRole]}
             </div>
           )}
 
-          {userEmail && (
+          {(resolvedName || resolvedEmail) && (
             <span className="hidden md:block text-xs text-muted-foreground font-medium max-w-[140px] truncate">
-              {userEmail}
+              {resolvedName ?? resolvedEmail}
             </span>
           )}
 
-          <button
-            onClick={handleSignOut}
-            title="Sign out"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Sign out</span>
-          </button>
+          {hasUser && (
+            <Link
+              href="/settings"
+              title="Profile"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Profile</span>
+            </Link>
+          )}
+
+          {hasUser && (
+            <button
+              onClick={handleSignOut}
+              title="Sign out"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Sign out</span>
+            </button>
+          )}
         </div>
       </div>
     </header>
