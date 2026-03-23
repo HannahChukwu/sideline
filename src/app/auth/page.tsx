@@ -39,10 +39,14 @@ function AuthForm() {
   const searchParams = useSearchParams();
 
   const rawRole = searchParams.get("role") as Role | null;
-  const role: Role = rawRole && rawRole in ROLE_META ? rawRole : "student";
+  const preselectedRole: Role | null = rawRole && rawRole in ROLE_META ? rawRole : null;
+
+  const [selectedRole, setSelectedRole] = useState<Role | null>(preselectedRole);
+  const role: Role = selectedRole ?? "student";
   const meta = ROLE_META[role];
 
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const initialMode = searchParams.get("mode") === "signup" ? "signup" : "signin";
+  const [mode, setMode] = useState<"signin" | "signup">(initialMode);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -132,6 +136,54 @@ function AuthForm() {
     }
   }
 
+  // ── Role selection step (when no role was pre-selected) ──────────────────────
+  if (!selectedRole) {
+    return (
+      <div
+        className={cn(
+          "w-full max-w-sm transition-all duration-500",
+          visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+        )}
+      >
+        <h1 className="text-2xl font-bold tracking-tight mb-1">
+          {mode === "signup" ? "Create your account" : "Welcome back"}
+        </h1>
+        <p className="text-sm text-muted-foreground mb-7">Choose how you use Sideline</p>
+
+        <div className="flex flex-col gap-2.5">
+          {(Object.entries(ROLE_META) as [Role, typeof ROLE_META[Role]][]).map(([r, m]) => (
+            <button
+              key={r}
+              onClick={() => setSelectedRole(r)}
+              className={cn(
+                "flex items-center gap-4 px-4 py-3.5 rounded-xl border text-left transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]",
+                "border-white/10 bg-white/[0.025] hover:bg-white/[0.05] hover:border-white/20"
+              )}
+            >
+              <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0", m.color)}>
+                {m.icon}
+              </div>
+              <div>
+                <p className="text-sm font-bold text-foreground">{m.label}</p>
+                <p className="text-[11px] text-foreground/40 font-medium">{m.description}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <p className="text-center text-xs text-muted-foreground mt-5">
+          {mode === "signin" ? "Don't have an account?" : "Already have an account?"}{" "}
+          <button
+            onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(null); }}
+            className="text-primary font-semibold hover:underline underline-offset-2 transition-colors"
+          >
+            {mode === "signin" ? "Sign up" : "Sign in"}
+          </button>
+        </p>
+      </div>
+    );
+  }
+
   // ── Email confirmation sent state ────────────────────────────────────────────
   if (emailSent) {
     return (
@@ -167,11 +219,15 @@ function AuthForm() {
         visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
       )}
     >
-      {/* Role pill */}
-      <div className={cn("inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold mb-6 tracking-wide", meta.color)}>
+      {/* Role pill — click to go back to role selection */}
+      <button
+        onClick={() => setSelectedRole(null)}
+        className={cn("inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold mb-6 tracking-wide hover:opacity-80 transition-opacity", meta.color)}
+      >
         {meta.icon}
         {meta.label} Portal
-      </div>
+        <span className="text-[10px] opacity-50 ml-0.5">· change</span>
+      </button>
 
       {/* Heading */}
       <h1 className="text-2xl font-bold tracking-tight mb-1">

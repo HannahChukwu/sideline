@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { ArrowLeft, Sparkles, Loader2, Download, Share2, RefreshCw, Wand2 } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { ArrowLeft, Sparkles, Loader2, Download, Share2, RefreshCw, Wand2, Send, MessageSquare, CheckCircle, Clock } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { Navbar } from "@/components/layout/navbar";
 import { SPORTS, ASSET_TYPES, type AssetType } from "@/lib/mock-data";
+import { useAppStore } from "@/lib/store";
 
 interface FormState {
   type: AssetType;
@@ -17,21 +18,76 @@ interface FormState {
   eventDate: string;
   customPrompt: string;
   style: string;
+  format: string;
+  colorPalette: string;
+  composition: string;
+  lighting: string;
+  mood: string;
+}
+
+interface ChatMessage {
+  role: "user";
+  content: string;
 }
 
 const STYLES = [
-  { value: "minimal", label: "Minimal" },
-  { value: "bold", label: "Bold & Dramatic" },
-  { value: "retro", label: "Retro" },
-  { value: "cinematic", label: "Cinematic" },
+  { value: "illustrated", label: "Illustrated", description: "Painted poster collage" },
+  { value: "bold", label: "Bold", description: "High contrast, explosive" },
+  { value: "cinematic", label: "Cinematic", description: "Epic movie-poster" },
+  { value: "retro", label: "Retro", description: "Vintage 70s–80s style" },
+  { value: "minimal", label: "Minimal", description: "Clean & understated" },
 ];
 
-const GENERATED_PREVIEWS = [
-  "https://images.unsplash.com/photo-1546519638-68e109498ffc?w=800&q=80",
-  "https://images.unsplash.com/photo-1579952363873-27f3bade9f55?w=800&q=80",
-  "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=800&q=80",
-  "https://images.unsplash.com/photo-1566577739112-5180d4bf9390?w=800&q=80",
+const FORMATS = [
+  { value: "story", label: "Story", description: "9:16 · Instagram / TikTok" },
+  { value: "post", label: "Post", description: "1:1 · Instagram / X" },
+  { value: "banner", label: "Banner", description: "16:9 · Twitter / Web" },
 ];
+
+const COLOR_PALETTES = [
+  { value: "", label: "Auto", description: "AI picks from team", colors: [] as string[] },
+  { value: "red and white", label: "Red & White", description: "", colors: ["#CC0000", "#FFFFFF"] },
+  { value: "blue and gold", label: "Blue & Gold", description: "", colors: ["#003DA5", "#FFB612"] },
+  { value: "black and orange", label: "Black & Orange", description: "", colors: ["#111111", "#FF6900"] },
+  { value: "green and white", label: "Green & White", description: "", colors: ["#006400", "#FFFFFF"] },
+  { value: "purple and gold", label: "Purple & Gold", description: "", colors: ["#4B0082", "#FFD700"] },
+  { value: "navy and silver", label: "Navy & Silver", description: "", colors: ["#001F5B", "#C0C0C0"] },
+  { value: "maroon and gold", label: "Maroon & Gold", description: "", colors: ["#800000", "#FFD700"] },
+  { value: "black and red", label: "Black & Red", description: "", colors: ["#111111", "#CC0000"] },
+];
+
+const COMPOSITION_OPTIONS = [
+  { value: "", label: "Auto", description: "AI decides" },
+  { value: "single hero athlete in foreground, massive close-up shot dominating the frame", label: "Hero Athlete", description: "One player, close up" },
+  { value: "full team group together, team huddle or celebration with all players visible", label: "Team Group", description: "Full squad shown" },
+  { value: "ball or sport equipment as central visual hero, athlete in background", label: "Equipment Focus", description: "Ball / gear hero" },
+  { value: "wide stadium establishing shot, crowd filling the stands, venue as the star", label: "Venue / Crowd", description: "Stadium atmosphere" },
+  { value: "split composition with both teams facing each other from opposite sides of center", label: "Matchup Split", description: "Both teams vs." },
+];
+
+const LIGHTING_OPTIONS = [
+  { value: "", label: "Auto", description: "AI decides" },
+  { value: "dramatic dark underlighting with deep shadows and high contrast chiaroscuro", label: "Dramatic Dark", description: "Dark & moody" },
+  { value: "bright stadium floodlights, high key lighting, vivid and energetic", label: "Stadium Lights", description: "Bright & vivid" },
+  { value: "golden hour warm sunset, long shadows, amber and orange glow", label: "Golden Hour", description: "Warm & cinematic" },
+  { value: "night game, electric blue-black sky, neon stadium lights, cool tones", label: "Night Game", description: "Night atmosphere" },
+  { value: "crisp daytime natural sunlight, clean open bright light", label: "Daytime Sun", description: "Clean & natural" },
+];
+
+const MOOD_OPTIONS = [
+  { value: "", label: "Auto", description: "Matches asset type" },
+  { value: "maximum hype, explosive energy, electric game-day intensity", label: "Hype / Intense", description: "Max energy" },
+  { value: "triumphant victory celebration, pure joy and euphoria, fists raised", label: "Celebratory", description: "Victory energy" },
+  { value: "epic cinematic gravitas, historic and legendary, larger than life", label: "Epic / Dramatic", description: "Grand scale" },
+  { value: "motivational, determined, locked in focus, warrior ready, coiled energy", label: "Motivational", description: "Focused & driven" },
+  { value: "clean, professional, confident and polished, brand-level restraint", label: "Professional", description: "Clean & sharp" },
+];
+
+const FORMAT_ASPECT: Record<string, string> = {
+  story: "aspect-[9/16]",
+  post: "aspect-square",
+  banner: "aspect-video",
+};
 
 export default function CreateAsset() {
   const [form, setForm] = useState<FormState>({
@@ -43,10 +99,26 @@ export default function CreateAsset() {
     awayScore: "",
     eventDate: "",
     customPrompt: "",
-    style: "bold",
+    style: "illustrated",
+    format: "story",
+    colorPalette: "",
+    composition: "",
+    lighting: "",
+    mood: "",
   });
-  const [step, setStep] = useState<"form" | "generating" | "result">("form");
-  const [generatedIndex, setGeneratedIndex] = useState(0);
+  const [step, setStep] = useState<"form" | "generating" | "result" | "error">("form");
+  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  const [generatedTitle, setGeneratedTitle] = useState<string>("");
+  const [generatedTagline, setGeneratedTagline] = useState<string>("");
+  const [generateError, setGenerateError] = useState<string>("");
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [isRefining, setIsRefining] = useState(false);
+  const [designerName, setDesignerName] = useState("");
+  const [saveState, setSaveState] = useState<null | "saving" | "published" | "draft">(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  const addAsset = useAppStore((s) => s.addAsset);
 
   const isScoreType = form.type === "final-score";
 
@@ -54,21 +126,110 @@ export default function CreateAsset() {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  async function generate() {
-    setStep("generating");
-    // Simulate AI generation delay
-    await new Promise((r) => setTimeout(r, 2800));
-    setGeneratedIndex(Math.floor(Math.random() * GENERATED_PREVIEWS.length));
-    setStep("result");
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages, isRefining]);
+
+  async function generate(refinements: string[] = []) {
+    const isInitial = refinements.length === 0;
+    if (isInitial) {
+      setStep("generating");
+      setGenerateError("");
+    } else {
+      setIsRefining(true);
+    }
+
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: form.type,
+          sport: form.sport,
+          homeTeam: form.homeTeam,
+          awayTeam: form.awayTeam,
+          homeScore: form.homeScore || undefined,
+          awayScore: form.awayScore || undefined,
+          eventDate: form.eventDate || undefined,
+          style: form.style,
+          format: form.format,
+          customPrompt: form.customPrompt || undefined,
+          colorPalette: form.colorPalette || undefined,
+          composition: form.composition || undefined,
+          lighting: form.lighting || undefined,
+          mood: form.mood || undefined,
+          refinements: refinements.length > 0 ? refinements : undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (isInitial) {
+          setGenerateError(data.error ?? "Generation failed");
+          setStep("error");
+        }
+        return;
+      }
+      setGeneratedImage(data.imageUrl);
+      setGeneratedTitle(data.title);
+      setGeneratedTagline(data.tagline);
+      setStep("result");
+    } catch {
+      if (isInitial) {
+        setGenerateError("Network error — please try again");
+        setStep("error");
+      }
+    } finally {
+      setIsRefining(false);
+    }
+  }
+
+  async function sendChatMessage() {
+    if (!chatInput.trim() || isRefining) return;
+    const message = chatInput.trim();
+    const updated = [...chatMessages, { role: "user" as const, content: message }];
+    setChatMessages(updated);
+    setChatInput("");
+    await generate(updated.map((m) => m.content));
   }
 
   function regenerate() {
-    setStep("generating");
-    setTimeout(() => {
-      setGeneratedIndex(Math.floor(Math.random() * GENERATED_PREVIEWS.length));
-      setStep("result");
-    }, 2000);
+    setChatMessages([]);
+    setSaveState(null);
+    generate([]);
   }
+
+  function saveAsset(status: "published" | "draft") {
+    if (!generatedImage) return;
+    setSaveState("saving");
+    addAsset({
+      title: generatedTitle || `${form.homeTeam} vs ${form.awayTeam}`,
+      tagline: generatedTagline || "",
+      type: form.type,
+      status,
+      sport: form.sport,
+      homeTeam: form.homeTeam,
+      awayTeam: form.awayTeam,
+      homeScore: form.homeScore ? Number(form.homeScore) : undefined,
+      awayScore: form.awayScore ? Number(form.awayScore) : undefined,
+      eventDate: form.eventDate || new Date().toISOString().split("T")[0],
+      imageUrl: generatedImage,
+      style: form.style,
+      format: form.format,
+      designerName: designerName.trim() || "Designer",
+    });
+    setSaveState(status === "published" ? "published" : "draft");
+  }
+
+  /* ─── Shared picker style helpers ──────────────────────────────────── */
+  const pill = (active: boolean) =>
+    `flex items-center justify-between px-3 py-2.5 rounded-xl border text-sm font-medium transition-all text-left ${
+      active
+        ? "border-primary/40 bg-primary/10 text-primary"
+        : "border-border/50 bg-card text-muted-foreground hover:border-border hover:text-foreground"
+    }`;
+
+  const pillDesc = (active: boolean) =>
+    `text-xs font-normal ${active ? "text-primary/70" : "text-muted-foreground/50"}`;
 
   return (
     <div className="min-h-screen bg-background">
@@ -87,14 +248,16 @@ export default function CreateAsset() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Left — Form */}
+          {/* ── Left — Form ─────────────────────────────────────────────────── */}
           <div className="space-y-6">
             <div>
               <h1 className="text-2xl font-bold mb-1">Generate Asset</h1>
-              <p className="text-sm text-muted-foreground">Fill in the details and let AI handle the design.</p>
+              <p className="text-sm text-muted-foreground">
+                Configure your design — the more you fill in, the less you&apos;ll need to type in chat.
+              </p>
             </div>
 
-            {/* Asset type */}
+            {/* ── Asset Type ─── */}
             <div>
               <label className="text-xs text-muted-foreground uppercase tracking-wider mb-3 block">Asset Type</label>
               <div className="grid grid-cols-2 gap-2">
@@ -114,7 +277,40 @@ export default function CreateAsset() {
               </div>
             </div>
 
-            {/* Sport */}
+            {/* ── Output Format ─── */}
+            <div>
+              <label className="text-xs text-muted-foreground uppercase tracking-wider mb-3 block">Output Format</label>
+              <div className="grid grid-cols-3 gap-2">
+                {FORMATS.map((f) => (
+                  <button
+                    key={f.value}
+                    onClick={() => set("format", f.value)}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      form.format === f.value
+                        ? "border-primary/40 bg-primary/10 text-primary"
+                        : "border-border/50 bg-card text-muted-foreground hover:border-border hover:text-foreground"
+                    }`}
+                  >
+                    {/* Format shape preview */}
+                    <div className="flex items-center gap-1.5 mb-2">
+                      {f.value === "story" && (
+                        <div className="w-3 h-5 rounded-sm border-2 border-current opacity-60" />
+                      )}
+                      {f.value === "post" && (
+                        <div className="w-4 h-4 rounded-sm border-2 border-current opacity-60" />
+                      )}
+                      {f.value === "banner" && (
+                        <div className="w-6 h-3.5 rounded-sm border-2 border-current opacity-60" />
+                      )}
+                    </div>
+                    <span className="block text-sm font-semibold">{f.label}</span>
+                    <span className="block text-xs font-normal mt-0.5 opacity-60">{f.description}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* ── Sport ─── */}
             <div>
               <label className="text-xs text-muted-foreground uppercase tracking-wider mb-3 block">Sport</label>
               <div className="flex flex-wrap gap-2">
@@ -144,7 +340,7 @@ export default function CreateAsset() {
               </div>
             </div>
 
-            {/* Teams */}
+            {/* ── Teams ─── */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">Home Team</label>
@@ -168,7 +364,7 @@ export default function CreateAsset() {
               </div>
             </div>
 
-            {/* Scores (only for final-score) */}
+            {/* ── Scores (final-score only) ─── */}
             {isScoreType && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -194,7 +390,7 @@ export default function CreateAsset() {
               </div>
             )}
 
-            {/* Event date */}
+            {/* ── Event Date ─── */}
             <div>
               <label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">Event Date</label>
               <input
@@ -205,43 +401,130 @@ export default function CreateAsset() {
               />
             </div>
 
-            {/* Visual style */}
+            {/* ── Team Colors ─── */}
             <div>
-              <label className="text-xs text-muted-foreground uppercase tracking-wider mb-3 block">Visual Style</label>
-              <div className="grid grid-cols-4 gap-2">
-                {STYLES.map((s) => (
+              <label className="text-xs text-muted-foreground uppercase tracking-wider mb-3 block">Team Colors</label>
+              <div className="grid grid-cols-3 gap-2">
+                {COLOR_PALETTES.map((p) => (
                   <button
-                    key={s.value}
-                    onClick={() => set("style", s.value)}
-                    className={`p-2 rounded-lg border text-xs font-medium transition-all ${
-                      form.style === s.value
+                    key={p.value}
+                    onClick={() => set("colorPalette", p.value)}
+                    className={`p-2.5 rounded-xl border text-xs font-medium text-left transition-all ${
+                      form.colorPalette === p.value
                         ? "border-primary/40 bg-primary/10 text-primary"
-                        : "border-border/50 bg-card text-muted-foreground hover:text-foreground"
+                        : "border-border/50 bg-card text-muted-foreground hover:border-border hover:text-foreground"
                     }`}
                   >
-                    {s.label}
+                    {p.colors.length > 0 ? (
+                      <div className="flex gap-1 mb-1.5">
+                        {p.colors.map((c) => (
+                          <div
+                            key={c}
+                            className="w-4 h-4 rounded-sm border border-white/10 flex-shrink-0"
+                            style={{ backgroundColor: c }}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="w-4 h-4 rounded-sm border border-dashed border-current opacity-40 mb-1.5" />
+                    )}
+                    <span className="block font-medium leading-tight">{p.label}</span>
+                    {p.description && (
+                      <span className="block text-xs font-normal opacity-50 mt-0.5">{p.description}</span>
+                    )}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Custom prompt */}
+            {/* ── Visual Style ─── */}
             <div>
-              <label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
-                Additional Instructions <span className="text-muted-foreground/50">(optional)</span>
-              </label>
-              <textarea
-                value={form.customPrompt}
-                onChange={(e) => set("customPrompt", e.target.value)}
-                placeholder="Add team colors, special effects, taglines, or anything specific..."
-                rows={3}
-                className="w-full px-3 py-2.5 rounded-xl bg-card border border-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all resize-none"
-              />
+              <label className="text-xs text-muted-foreground uppercase tracking-wider mb-3 block">Visual Style</label>
+              <div className="grid grid-cols-1 gap-2">
+                {STYLES.map((s) => (
+                  <button
+                    key={s.value}
+                    onClick={() => set("style", s.value)}
+                    className={pill(form.style === s.value)}
+                  >
+                    <span>{s.label}</span>
+                    <span className={pillDesc(form.style === s.value)}>{s.description}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Generate button */}
+            {/* ── Composition Focus ─── */}
+            <div>
+              <label className="text-xs text-muted-foreground uppercase tracking-wider mb-3 block">Composition Focus</label>
+              <div className="grid grid-cols-1 gap-2">
+                {COMPOSITION_OPTIONS.map((c) => (
+                  <button
+                    key={c.value}
+                    onClick={() => set("composition", c.value)}
+                    className={pill(form.composition === c.value)}
+                  >
+                    <span>{c.label}</span>
+                    <span className={pillDesc(form.composition === c.value)}>{c.description}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* ── Lighting ─── */}
+            <div>
+              <label className="text-xs text-muted-foreground uppercase tracking-wider mb-3 block">Lighting</label>
+              <div className="grid grid-cols-1 gap-2">
+                {LIGHTING_OPTIONS.map((l) => (
+                  <button
+                    key={l.value}
+                    onClick={() => set("lighting", l.value)}
+                    className={pill(form.lighting === l.value)}
+                  >
+                    <span>{l.label}</span>
+                    <span className={pillDesc(form.lighting === l.value)}>{l.description}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* ── Mood / Energy ─── */}
+            <div>
+              <label className="text-xs text-muted-foreground uppercase tracking-wider mb-3 block">Mood / Energy</label>
+              <div className="grid grid-cols-1 gap-2">
+                {MOOD_OPTIONS.map((m) => (
+                  <button
+                    key={m.value}
+                    onClick={() => set("mood", m.value)}
+                    className={pill(form.mood === m.value)}
+                  >
+                    <span>{m.label}</span>
+                    <span className={pillDesc(form.mood === m.value)}>{m.description}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* ── Additional Instructions (pre-generation only) ─── */}
+            {step !== "result" && (
+              <div>
+                <label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
+                  Additional Instructions{" "}
+                  <span className="text-muted-foreground/50 normal-case">(optional)</span>
+                </label>
+                <textarea
+                  value={form.customPrompt}
+                  onChange={(e) => set("customPrompt", e.target.value)}
+                  placeholder="Mascot name, jersey numbers, location, special effects, anything specific to your school..."
+                  rows={3}
+                  className="w-full px-3 py-2.5 rounded-xl bg-card border border-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all resize-none"
+                />
+              </div>
+            )}
+
+            {/* ── Generate Button ─── */}
             <button
-              onClick={generate}
+              onClick={() => generate([])}
               disabled={step === "generating" || !form.homeTeam || !form.awayTeam}
               className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold transition-all hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed glow-orange-sm hover:glow-orange"
             >
@@ -253,40 +536,54 @@ export default function CreateAsset() {
               ) : (
                 <>
                   <Wand2 className="w-4 h-4" />
-                  Generate Asset
+                  {step === "result" ? "Regenerate Fresh" : "Generate Asset"}
                 </>
               )}
             </button>
           </div>
 
-          {/* Right — Preview */}
+          {/* ── Right — Preview ──────────────────────────────────────────────── */}
           <div className="lg:sticky lg:top-24 h-fit">
             <div className="rounded-2xl border border-border/50 bg-card overflow-hidden">
+              {/* Preview header */}
               <div className="p-4 border-b border-border/50 flex items-center justify-between">
                 <span className="text-sm font-medium text-foreground">Preview</span>
-                {step === "result" && (
-                  <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
+                  {/* Format badge */}
+                  <span className="px-2 py-0.5 rounded-md bg-muted text-xs text-muted-foreground font-medium capitalize">
+                    {form.format}
+                  </span>
+                  {step === "result" && (
                     <button
                       onClick={regenerate}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground bg-muted/50 hover:bg-muted transition-all"
                     >
                       <RefreshCw className="w-3 h-3" /> Regenerate
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
 
-              <div className="aspect-[16/9] relative bg-muted/30">
-                {step === "form" && (
+              {/* Dynamic aspect ratio based on format */}
+              <div className={`${FORMAT_ASPECT[form.format] ?? "aspect-[9/16]"} relative bg-muted/30`}>
+                {(step === "form" || step === "error") && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground/40">
-                    <Sparkles className="w-8 h-8" />
-                    <span className="text-sm">Your asset will appear here</span>
+                    {step === "error" ? (
+                      <>
+                        <Sparkles className="w-8 h-8 text-destructive/50" />
+                        <span className="text-sm text-destructive/70 text-center px-4">{generateError}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-8 h-8" />
+                        <span className="text-sm">Your asset will appear here</span>
+                      </>
+                    )}
                   </div>
                 )}
 
                 {step === "generating" && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
-                    {/* Animated dots */}
                     <div className="relative w-16 h-16">
                       <div className="absolute inset-0 rounded-full border-2 border-primary/20 animate-ping" />
                       <div className="absolute inset-2 rounded-full border-2 border-primary/40" />
@@ -296,40 +593,198 @@ export default function CreateAsset() {
                     </div>
                     <div className="text-center">
                       <p className="text-sm font-medium text-foreground mb-1">Generating your asset</p>
-                      <p className="text-xs text-muted-foreground">AI is crafting your design...</p>
+                      <p className="text-xs text-muted-foreground">AI is crafting your design…</p>
                     </div>
-                    {/* Progress bar */}
                     <div className="w-48 h-1 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-primary rounded-full animate-[progress_2.8s_ease-in-out_forwards]" style={{ width: "0%", animation: "none", transition: "width 2.8s ease-in-out", }} ref={(el) => { if (el) setTimeout(() => { el.style.width = "100%"; }, 50); }} />
+                      <div
+                        className="h-full bg-primary rounded-full"
+                        style={{ width: "0%", transition: "width 30s linear" }}
+                        ref={(el) => { if (el) setTimeout(() => { el.style.width = "90%"; }, 50); }}
+                      />
                     </div>
                   </div>
                 )}
 
-                {step === "result" && (
+                {/* Overlay regenerating spinner */}
+                {step === "result" && isRefining && (
+                  <div className="absolute inset-0 bg-background/60 backdrop-blur-sm flex flex-col items-center justify-center gap-3 z-10">
+                    <div className="relative w-12 h-12">
+                      <div className="absolute inset-0 rounded-full border-2 border-primary/20 animate-ping" />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Wand2 className="w-4 h-4 text-primary animate-pulse" />
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Applying your changes…</p>
+                  </div>
+                )}
+
+                {step === "result" && generatedImage && (
                   <Image
-                    src={GENERATED_PREVIEWS[generatedIndex]}
+                    src={generatedImage}
                     alt="Generated asset"
                     fill
                     className="object-cover"
                     sizes="(max-width: 1200px) 50vw, 600px"
+                    unoptimized
                   />
                 )}
               </div>
 
+              {/* Result metadata + actions */}
               {step === "result" && (
                 <div className="p-4 border-t border-border/50">
-                  <p className="text-sm font-medium text-foreground mb-1">
-                    {form.homeTeam || "Home"} vs {form.awayTeam || "Away"}
+                  {generatedTitle && (
+                    <p className="text-sm font-semibold text-foreground mb-0.5">{generatedTitle}</p>
+                  )}
+                  {generatedTagline && (
+                    <p className="text-xs text-primary/80 mb-1 italic">{generatedTagline}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground mb-4">
+                    {form.homeTeam} vs {form.awayTeam}
                     {isScoreType && form.homeScore && ` — ${form.homeScore}–${form.awayScore}`}
+                    {" · "}{form.sport} · {ASSET_TYPES.find((t) => t.value === form.type)?.label}
                   </p>
-                  <p className="text-xs text-muted-foreground mb-4">{form.sport} · {ASSET_TYPES.find((t) => t.value === form.type)?.label}</p>
 
-                  <div className="flex gap-2">
-                    <button className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all glow-orange-sm">
-                      <Share2 className="w-3.5 h-3.5" /> Publish
-                    </button>
-                    <button className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-muted text-foreground text-xs font-medium hover:bg-muted/70 transition-all">
-                      <Download className="w-3.5 h-3.5" />
+                  {/* Save state: idle → form, saving → spinner, saved → success */}
+                  {saveState === null && (
+                    <>
+                      {/* Designer name */}
+                      <input
+                        type="text"
+                        value={designerName}
+                        onChange={(e) => setDesignerName(e.target.value)}
+                        placeholder="Your name (e.g. Jordan M.)"
+                        className="w-full px-3 py-2 mb-3 rounded-xl bg-muted/50 border border-border/50 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/40 transition-all"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => saveAsset("published")}
+                          className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all glow-violet-sm"
+                        >
+                          <Share2 className="w-3.5 h-3.5" /> Publish to Portal
+                        </button>
+                        <button
+                          onClick={() => saveAsset("draft")}
+                          className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-muted text-foreground text-xs font-medium hover:bg-muted/70 transition-all"
+                          title="Save as draft"
+                        >
+                          <Clock className="w-3.5 h-3.5" />
+                        </button>
+                        <a
+                          href={generatedImage ?? "#"}
+                          download="asset.png"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-muted text-foreground text-xs font-medium hover:bg-muted/70 transition-all"
+                          title="Download image"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </a>
+                      </div>
+                    </>
+                  )}
+
+                  {saveState === "saving" && (
+                    <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Saving…
+                    </div>
+                  )}
+
+                  {saveState === "published" && (
+                    <div className="rounded-xl bg-green-500/10 border border-green-500/20 p-3 flex items-start gap-3">
+                      <CheckCircle className="w-4 h-4 text-green-400 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-semibold text-green-400 mb-1">Published to portal!</p>
+                        <p className="text-xs text-muted-foreground mb-2">Athletes and students can now see and like this asset.</p>
+                        <div className="flex gap-2">
+                          <Link href="/designer" className="text-xs text-primary font-medium hover:text-primary/80">
+                            View Dashboard →
+                          </Link>
+                          <span className="text-muted-foreground/30">·</span>
+                          <button
+                            onClick={() => { setSaveState(null); regenerate(); }}
+                            className="text-xs text-muted-foreground hover:text-foreground"
+                          >
+                            Make another
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {saveState === "draft" && (
+                    <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/20 p-3 flex items-start gap-3">
+                      <Clock className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-semibold text-yellow-400 mb-1">Saved as draft</p>
+                        <p className="text-xs text-muted-foreground mb-2">Only you can see this. Publish it from your dashboard when it&apos;s ready.</p>
+                        <div className="flex gap-2">
+                          <Link href="/designer" className="text-xs text-primary font-medium hover:text-primary/80">
+                            View Dashboard →
+                          </Link>
+                          <span className="text-muted-foreground/30">·</span>
+                          <button
+                            onClick={() => setSaveState(null)}
+                            className="text-xs text-muted-foreground hover:text-foreground"
+                          >
+                            Publish now
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── AI Chat Refinement (appears after first generation) ── */}
+              {step === "result" && (
+                <div className="border-t border-border/50">
+                  {/* Chat header */}
+                  <div className="px-4 pt-3 pb-2 flex items-center gap-2">
+                    <MessageSquare className="w-3.5 h-3.5 text-primary/60" />
+                    <span className="text-xs font-semibold text-foreground">Refine with AI</span>
+                    <span className="text-xs text-muted-foreground">— describe what to change</span>
+                  </div>
+
+                  {/* Message history */}
+                  {chatMessages.length > 0 && (
+                    <div className="px-4 pb-2 space-y-2 max-h-36 overflow-y-auto">
+                      {chatMessages.map((m, i) => (
+                        <div key={i} className="flex justify-end">
+                          <div className="bg-primary/10 border border-primary/20 text-primary text-xs rounded-2xl rounded-tr-sm px-3 py-1.5 max-w-[85%] leading-relaxed">
+                            {m.content}
+                          </div>
+                        </div>
+                      ))}
+                      {isRefining && (
+                        <div className="flex justify-start">
+                          <div className="bg-muted text-muted-foreground text-xs rounded-2xl rounded-tl-sm px-3 py-1.5 flex items-center gap-1.5">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            Regenerating…
+                          </div>
+                        </div>
+                      )}
+                      <div ref={chatEndRef} />
+                    </div>
+                  )}
+
+                  {/* Chat input */}
+                  <div className="p-3 pt-1 flex gap-2">
+                    <input
+                      type="text"
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") sendChatMessage(); }}
+                      placeholder="Make the background darker, add more crowd energy…"
+                      disabled={isRefining}
+                      className="flex-1 px-3 py-2 rounded-xl bg-muted/50 border border-border/50 text-xs text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all disabled:opacity-50"
+                    />
+                    <button
+                      onClick={sendChatMessage}
+                      disabled={!chatInput.trim() || isRefining}
+                      className="px-3 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center"
+                    >
+                      <Send className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>

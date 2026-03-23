@@ -4,30 +4,48 @@ import Image from "next/image";
 import { Heart, Eye, MoreHorizontal, Clock, CheckCircle, FileEdit } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { Asset } from "@/lib/mock-data";
+
+/** Minimal shape required by AssetCard — satisfied by both Asset (mock-data) and StoreAsset (store). */
+export interface CardAsset {
+  id: string;
+  title: string;
+  type: "gameday" | "final-score" | "poster" | "highlight";
+  status: "draft" | "published" | "archived";
+  sport: string;
+  homeTeam: string;
+  awayTeam: string;
+  homeScore?: number;
+  awayScore?: number;
+  eventDate: string;
+  imageUrl: string;
+  likes: number;
+  designerName: string;
+  createdAt: string;
+}
 
 interface AssetCardProps {
-  asset: Asset;
+  asset: CardAsset;
   variant?: "designer" | "athlete" | "fan";
   liked?: boolean;
   onLike?: (id: string) => void;
+  onPublish?: (id: string) => void; // for designer dashboard — promote draft to published
 }
 
 const typeColors: Record<string, string> = {
-  "gameday": "bg-orange-500/10 text-orange-400 border-orange-500/20",
+  "gameday":     "bg-orange-500/10 text-orange-400 border-orange-500/20",
   "final-score": "bg-blue-500/10 text-blue-400 border-blue-500/20",
-  "poster": "bg-purple-500/10 text-purple-400 border-purple-500/20",
-  "highlight": "bg-green-500/10 text-green-400 border-green-500/20",
+  "poster":      "bg-purple-500/10 text-purple-400 border-purple-500/20",
+  "highlight":   "bg-green-500/10 text-green-400 border-green-500/20",
 };
 
 const typeLabels: Record<string, string> = {
-  "gameday": "Game Day",
+  "gameday":     "Game Day",
   "final-score": "Final Score",
-  "poster": "Poster",
-  "highlight": "Highlight",
+  "poster":      "Poster",
+  "highlight":   "Highlight",
 };
 
-export function AssetCard({ asset, variant = "designer", liked = false, onLike }: AssetCardProps) {
+export function AssetCard({ asset, variant = "designer", liked = false, onLike, onPublish }: AssetCardProps) {
   const isPublished = asset.status === "published";
 
   return (
@@ -40,8 +58,8 @@ export function AssetCard({ asset, variant = "designer", liked = false, onLike }
           fill
           className="object-cover transition-transform duration-500 group-hover:scale-105"
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+          unoptimized
         />
-        {/* Overlay gradient */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
 
         {/* Top badges */}
@@ -62,7 +80,7 @@ export function AssetCard({ asset, variant = "designer", liked = false, onLike }
           )}
         </div>
 
-        {/* Score overlay for final-score type */}
+        {/* Score overlay for final-score */}
         {asset.type === "final-score" && asset.homeScore !== undefined && (
           <div className="absolute bottom-0 left-0 right-0 p-3 flex items-end justify-between">
             <div className="flex items-baseline gap-3">
@@ -110,9 +128,9 @@ export function AssetCard({ asset, variant = "designer", liked = false, onLike }
         {/* Footer */}
         <div className="flex items-center justify-between pt-3 border-t border-border/50">
           <div className="flex items-center gap-3">
-            {/* Like button */}
             <button
               onClick={() => onLike?.(asset.id)}
+              disabled={variant === "designer"}
               className={cn(
                 "flex items-center gap-1.5 text-xs transition-all",
                 variant === "athlete" || variant === "fan"
@@ -122,24 +140,35 @@ export function AssetCard({ asset, variant = "designer", liked = false, onLike }
                   : "text-muted-foreground cursor-default"
               )}
             >
-              <Heart className={cn("w-3.5 h-3.5", liked && "fill-red-400")} />
-              <span>{asset.likes}</span>
+              <Heart className={cn("w-3.5 h-3.5 transition-all", liked && "fill-red-400 scale-110")} />
+              <span className="tabular-nums">{asset.likes}</span>
             </button>
 
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Eye className="w-3.5 h-3.5" />
-              <span>{Math.floor(asset.likes * 4.2 + 10)}</span>
+              <span>{Math.max(asset.likes * 4 + 10, 10)}</span>
             </div>
           </div>
 
+          {/* Designer actions */}
           {variant === "designer" && asset.status === "draft" && (
-            <button className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 font-medium transition-colors">
-              <FileEdit className="w-3 h-3" />
-              Edit
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => onPublish?.(asset.id)}
+                className="flex items-center gap-1 text-[11px] text-green-400 hover:text-green-300 font-medium transition-colors"
+              >
+                <CheckCircle className="w-3 h-3" />
+                Publish
+              </button>
+              <button className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 font-medium transition-colors">
+                <FileEdit className="w-3 h-3" />
+                Edit
+              </button>
+            </div>
           )}
 
-          {(variant === "athlete") && !liked && (
+          {/* Athlete CTA */}
+          {variant === "athlete" && !liked && (
             <button
               onClick={() => onLike?.(asset.id)}
               className="text-[11px] text-primary hover:text-primary/80 font-medium transition-colors"

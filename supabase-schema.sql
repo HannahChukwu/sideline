@@ -15,6 +15,8 @@ create table if not exists public.profiles (
   created_at  timestamptz not null default now()
 );
 
+
+
 -- 2. ROW LEVEL SECURITY
 --    Users can only read/update their own profile.
 -- ------------------------------------------------------------
